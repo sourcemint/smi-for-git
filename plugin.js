@@ -8,8 +8,13 @@ exports.for = function (API) {
 		return resolver({}).then(function (resolvedConfig) {
 
 
-console.log("SPIN smi-for-git", "resolvedConfig", resolvedConfig);
-		
+console.log("RESOLVE smi-for-git", "resolvedConfig", resolvedConfig);
+
+
+//process.exit(1);
+
+resolvedConfig.t = Date.now();
+
 			return resolvedConfig;
 		});
 	}
