@@ -96,11 +96,11 @@ exports.for = function (API) {
 
 			}).then(function () {
 
-console.log("RESOLVE smi-for-git", "resolvedConfig", resolvedConfig);
+//console.log("RESOLVE smi-for-git", "resolvedConfig", resolvedConfig);
 
 //process.exit(1);
 
-resolvedConfig.t = Date.now();
+//resolvedConfig.t = Date.now();
 
 				return resolvedConfig;
 			});
@@ -109,7 +109,7 @@ resolvedConfig.t = Date.now();
 
 	exports.turn = function (resolvedConfig) {
 
-console.log("TURN smi-for-git", "resolvedConfig", resolvedConfig);
+//console.log("TURN smi-for-git", "resolvedConfig", resolvedConfig);
 
 		function ensureSubmodule (submodulePath) {
 			if (resolvedConfig.existingSubmodules[submodulePath]) {
@@ -118,7 +118,7 @@ console.log("TURN smi-for-git", "resolvedConfig", resolvedConfig);
 			}
 			return API.Q.denodeify(function (callback) {
 
-console.log("PATH", API.PATH.join(resolvedConfig.gitRootPath, submodulePath));
+//console.log("PATH", API.PATH.join(resolvedConfig.gitRootPath, submodulePath));
 
 				return API.FS.exists(API.PATH.join(resolvedConfig.gitRootPath, submodulePath), function (exists) {
 					if (exists) {
@@ -126,7 +126,7 @@ console.log("PATH", API.PATH.join(resolvedConfig.gitRootPath, submodulePath));
 						return callback(null);
 					}
 
-console.log("TODO: create submodule", submodulePath);
+//console.log("TODO: create submodule", submodulePath);
 
 //process.exit(1);
 
