@@ -65,10 +65,46 @@ exports.for = function (API) {
 					});
 				}
 
-				function loadSubmoduleDeclarations (callback) {
-					resolvedConfig.declaredSubmodules = {};
-					return API.loadProgramDescriptor(function (err, programDescriptor) {
+				function loadSubmoduleDeclarationsAndMappings (callback) {
+					resolvedConfig.declaredMappings = {};
+
+					return API.PACKAGE.fromFile(API.PATH.join(process.env.PGS_WORKSPACE_ROOT, ".pgs/package.json"), {}, function (err, packageDescriptor) {
 						if (err) return callback(err);
+
+//					return API.loadProgramDescriptor(function (err, programDescriptor) {
+//						if (err) return callback(err);
+
+						if (packageDescriptor._data.mappings) {
+
+							var PGS_PACKAGES_DIRPATH = process.env.PGS_PACKAGES_DIRPATH;
+
+							for (var alias in packageDescriptor._data.mappings) {
+
+								var location = packageDescriptor._data.mappings[alias].location;
+
+								if (/^\./.test(alias)) {
+/*
+									var location = programDescriptor._data.mappings[alias].location;
+									if (!/^\//.test(location)) {
+										location = API.PATH.join(packageDescriptor._path, "..", location);
+									}
+									location = API.PATH.relative(resolvedConfig.gitRootPath, location);
+*/
+									resolvedConfig.declaredMappings[alias] = {
+										path: location
+									};
+								} else
+								if (location.substring(0, PGS_PACKAGES_DIRPATH.length) === PGS_PACKAGES_DIRPATH) {
+									resolvedConfig.declaredMappings["./../.deps" + location.substring(PGS_PACKAGES_DIRPATH.length)] = {
+										path: location
+									};
+								}
+							}
+						}
+
+						return callback(null);
+
+/*
 						return programDescriptor.getBootPackageDescriptor().then(function (packageDescriptor) {
 							if (!packageDescriptor._data.mappings) {
 								return callback(null);
@@ -87,11 +123,12 @@ exports.for = function (API) {
 							}
 							return callback(null);
 						}, callback);
+*/
 					});
 				}
 
 				return API.Q.denodeify(loadExistingSubmodules)().then(function () {
-					return API.Q.denodeify(loadSubmoduleDeclarations)();
+					return API.Q.denodeify(loadSubmoduleDeclarationsAndMappings)();
 				});
 
 			}).then(function () {
@@ -100,7 +137,7 @@ exports.for = function (API) {
 
 //process.exit(1);
 
-//resolvedConfig.t = Date.now();
+resolvedConfig.t = Date.now();
 
 				return resolvedConfig;
 			});
@@ -111,32 +148,171 @@ exports.for = function (API) {
 
 //console.log("TURN smi-for-git", "resolvedConfig", resolvedConfig);
 
-		function ensureSubmodule (submodulePath) {
-			if (resolvedConfig.existingSubmodules[submodulePath]) {
-				API.console.verbose("Submodule '" + submodulePath + "' already declared!");
-				return API.Q.resolve();
-			}
+		if (
+			!resolvedConfig.export ||
+			!resolvedConfig.export.catalog
+		) {
+			return API.Q.resolve();
+		}
+
+
+		function getConfig () {
+
 			return API.Q.denodeify(function (callback) {
 
-//console.log("PATH", API.PATH.join(resolvedConfig.gitRootPath, submodulePath));
+				return API.loadPINFProgramProtoDescriptor(function (err, programDescriptor) {
+					if (err) return callback(err);
 
-				return API.FS.exists(API.PATH.join(resolvedConfig.gitRootPath, submodulePath), function (exists) {
-					if (exists) {
-						API.console.verbose("Submodule '" + submodulePath + "' already exists at '" + API.PATH.join(resolvedConfig.gitRootPath, submodulePath) + "'!");
-						return callback(null);
+					function relativize () {
+						var configStr = JSON.stringify(programDescriptor._data);
+						configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(API.PATH.dirname(API.getRootPath())), "g"), "{{__DIRNAME__}}");
+						configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(process.env.PIO_PROFILE_KEY), "g"), "{{env.PIO_PROFILE_KEY}}");
+						programDescriptor._data = JSON.parse(configStr);
 					}
 
-//console.log("TODO: create submodule", submodulePath);
+					relativize();
 
-//process.exit(1);
-
-
-					return callback(null);
+					return callback(null, programDescriptor._data.config);
 				});
 			})();
 		}
 
-		return API.Q.all(Object.keys(resolvedConfig.declaredSubmodules).map(ensureSubmodule));		
+
+		function exportMappings (config) {
+			var commands = Object.keys(resolvedConfig.declaredMappings).map(function (alias) {
+				return [
+					'echo "[repository]"',
+					'echo "' + alias + '"',
+					'pushd "' + resolvedConfig.declaredMappings[alias].path + '"',
+					'echo "[repository.branch]"',
+					'git branch',
+					'echo "[repository.origin]"',
+					'git remote show -n origin',
+					'echo "[repository.log]"',
+					'git log -n 1',
+					'popd'
+				].join(";");
+			});
+
+			return API.Q.denodeify(function (callback) {
+				return API.runCommands(commands, function (err, stdout) {
+					if (err) return callback(err);
+
+					var expectedMappings = {};
+					for (var name in resolvedConfig.declaredMappings) {
+						expectedMappings[name] = true;
+					}
+					var mappings = {};
+					var current = {
+						alias: null,
+						section: null
+					};
+					var lines = stdout.split("\n");
+					var m = null;
+					for (var i=0,l=lines.length ; i<l ; i++) {
+						// section boundaries
+						m = lines[i].match(/^\[repository(\.([^\]]+))?\]$/);
+						if (m) {
+							current.section = m[2] || "";
+							continue;
+						}
+						// section content
+						if (current.section === "") {
+							current.alias = lines[i];
+							i += 1;
+							mappings[current.alias] = {
+								path: lines[i].split(" ")[0],
+								branch: null
+							};
+						} else
+						if (current.section === "branch") {
+							m = lines[i].match(/^\* ((\(detached from )?([^\)]+)(\))?)/);
+							if (m) {
+								if (m[1] === m[3]) {
+									mappings[current.alias].branch = m[1];
+								} else {
+									mappings[current.alias].branch = false;
+								}
+							}
+						} else
+						if (current.section === "origin") {
+							m = lines[i].match(/^\s*Fetch URL:\s*(.+)$/);
+							if (m) {
+								mappings[current.alias].origin = m[1];
+							}
+						} else
+						if (current.section === "log") {
+							m = lines[i].match(/^commit (.+)$/);
+							if (m) {
+								mappings[current.alias].ref = m[1];
+							}
+							m = lines[i].match(/^Date:\s*(.+)$/);
+							if (m) {
+								mappings[current.alias].date = new Date(m[1]).getTime();
+							}
+						}
+					}
+
+					var finalMappings = {};
+					for (var name in mappings) {
+						finalMappings[name] = {
+							"location": mappings[name].origin + "#" + mappings[name].ref
+						}
+						if (mappings[name].branch !== false) {
+							finalMappings[name].location += "(" + mappings[name].branch + ")";
+						}
+					}
+					return API.FS.outputFile(resolvedConfig.export.catalog, JSON.stringify({
+						"config": config,
+						"mappings": finalMappings
+					}, null, 4), "utf8", callback);
+				});
+			})();
+		}
+
+		return getConfig().then(function (config) {
+
+			return exportMappings(config);
+		});
+
+
+/*
+		function ensureMappings () {
+			if (!resolvedConfig.gitRootPath) {
+				return API.Q.resolve();
+			}
+
+			function ensureMapping (submodulePath) {
+				if (resolvedConfig.existingSubmodules[submodulePath]) {
+					API.console.verbose("Submodule '" + submodulePath + "' already declared!");
+					return API.Q.resolve();
+				}
+				return API.Q.denodeify(function (callback) {
+
+	//console.log("PATH", API.PATH.join(resolvedConfig.gitRootPath, submodulePath));
+
+					return API.FS.exists(API.PATH.join(resolvedConfig.gitRootPath, submodulePath), function (exists) {
+						if (exists) {
+							API.console.verbose("Submodule '" + submodulePath + "' already exists at '" + API.PATH.join(resolvedConfig.gitRootPath, submodulePath) + "'!");
+							return callback(null);
+						}
+
+	//console.log("TODO: create submodule", submodulePath);
+
+	//process.exit(1);
+
+
+						return callback(null);
+					});
+				})();
+			}
+
+			return API.Q.all(Object.keys(resolvedConfig.declaredMappings).map(ensureMapping));
+		}
+
+		return ensureMappings();
+*/
+
 	}
 
 	return exports;
