@@ -137,7 +137,7 @@ exports.for = function (API) {
 
 //process.exit(1);
 
-resolvedConfig.t = Date.now();
+//resolvedConfig.t = Date.now();
 
 				return resolvedConfig;
 			});
@@ -159,6 +159,10 @@ resolvedConfig.t = Date.now();
 		function getConfig () {
 
 			return API.Q.denodeify(function (callback) {
+
+				if (!API.FS.existsSync(API.getPINFProgramProtoDescriptorPath())) {
+					return callback(null, null);
+				}
 
 				return API.loadPINFProgramProtoDescriptor(function (err, programDescriptor) {
 					if (err) return callback(err);
@@ -271,6 +275,7 @@ resolvedConfig.t = Date.now();
 		}
 
 		return getConfig().then(function (config) {
+			if (!config) return;
 
 			return exportMappings(config);
 		});
