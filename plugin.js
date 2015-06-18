@@ -171,6 +171,7 @@ exports.for = function (API) {
 						var configStr = JSON.stringify(programDescriptor._data);
 						configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(API.PATH.dirname(API.getRootPath())), "g"), "{{__DIRNAME__}}");
 						configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(process.env.PIO_PROFILE_KEY), "g"), "{{env.PIO_PROFILE_KEY}}");
+						configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(process.env.PIO_PROFILE_PATH), "g"), "{{env.PIO_PROFILE_PATH}}");
 						programDescriptor._data = JSON.parse(configStr);
 					}
 
