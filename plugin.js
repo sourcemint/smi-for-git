@@ -4,20 +4,20 @@ exports.for = function (API) {
 
 	var exports = {};
 
+	function findGitRoot (path, callback) {
+		if (API.FS.existsSync(API.PATH.join(path, ".git"))) {
+			return callback(null, path);
+		}
+		var newPath = API.PATH.dirname(path);
+		if (newPath === path) {
+			return callback(new Error("No git root found!"));
+		}
+		return findGitRoot(newPath, callback);
+	}
+
 	exports.resolve = function (resolver, config, previousResolvedConfig) {
 
 		return resolver({}).then(function (resolvedConfig) {
-
-			function findGitRoot (path, callback) {
-				if (API.FS.existsSync(API.PATH.join(path, ".git"))) {
-					return callback(null, path);
-				}
-				var newPath = API.PATH.dirname(path);
-				if (newPath === path) {
-					return callback(new Error("No git root found!"));
-				}
-				return findGitRoot(newPath, callback);
-			}
 
 			function ensureGitRootPath (callback) {
 				if (resolvedConfig.gitRootPath) {
@@ -137,7 +137,7 @@ exports.for = function (API) {
 
 //process.exit(1);
 
-//resolvedConfig.t = Date.now();
+resolvedConfig.t = Date.now();
 
 				return resolvedConfig;
 			});
@@ -156,7 +156,7 @@ exports.for = function (API) {
 		}
 
 
-		function getConfig () {
+		function getDescriptor () {
 
 			return API.Q.denodeify(function (callback) {
 
@@ -177,108 +177,212 @@ exports.for = function (API) {
 
 					relativize();
 
-					return callback(null, programDescriptor._data.config);
+					return callback(null, {
+						"provenance": programDescriptor._data.$provenance || null,
+						"config": programDescriptor._data.config,
+						"mappings": programDescriptor._data.mappings
+					});
 				});
 			})();
 		}
 
 
-		function exportMappings (config) {
-			var commands = Object.keys(resolvedConfig.declaredMappings).map(function (alias) {
-				return [
-					'echo "[repository]"',
-					'echo "' + alias + '"',
-					'pushd "' + resolvedConfig.declaredMappings[alias].path + '"',
-					'echo "[repository.branch]"',
-					'git branch',
-					'echo "[repository.origin]"',
-					'git remote show -n origin',
-					'echo "[repository.log]"',
-					'git log -n 1',
-					'popd'
-				].join(";");
-			});
+		function exportMappings (provenance, config, mappings) {
 
-			return API.Q.denodeify(function (callback) {
-				return API.runCommands(commands, function (err, stdout) {
-					if (err) return callback(err);
+			var aliasedPackages = {};
+			for (var alias in mappings) {
+				if (
+					mappings[alias].location &&
+					!/\//.test(alias)
+				) {
+					aliasedPackages[API.FS.realpathSync(mappings[alias].location)] = alias;
+				}
+			}
 
-					var expectedMappings = {};
-					for (var name in resolvedConfig.declaredMappings) {
-						expectedMappings[name] = true;
-					}
-					var mappings = {};
-					var current = {
-						alias: null,
-						section: null
+			// TODO: Do this in resolve above once we have a singular unified way of loading
+			//       the PGS package and PINF descriptors in resolve and then use them when turning.
+			function getProvenances () {
+				if (!provenance) return API.Q.resolve();
+				return API.Q.denodeify(function (callback) {
+					var provenances = {
+						declaredMappings: {},
+						extends: {}
 					};
-					var lines = stdout.split("\n");
-					var m = null;
-					for (var i=0,l=lines.length ; i<l ; i++) {
-						// section boundaries
-						m = lines[i].match(/^\[repository(\.([^\]]+))?\]$/);
-						if (m) {
-							current.section = m[2] || "";
-							continue;
-						}
-						// section content
-						if (current.section === "") {
-							current.alias = lines[i];
-							i += 1;
-							mappings[current.alias] = {
-								path: lines[i].split(" ")[0],
-								branch: null
-							};
-						} else
-						if (current.section === "branch") {
-							m = lines[i].match(/^\* ((\(detached from )?([^\)]+)(\))?)/);
-							if (m) {
-								if (m[1] === m[3]) {
-									mappings[current.alias].branch = m[1];
+					var waitfor = API.WAITFOR.serial(function (err) {
+						if (err) return callback(err);
+						return callback(null, provenances);
+					});
+					for (var path in provenance) {
+						waitfor(path, function (path, callback) {
+
+							return findGitRoot(path, function (err, gitRoot) {
+								if (err) return callback(err);
+								if (!gitRoot) {
+									return callback(new Error("No git root found for: " + path));
+								}
+
+								var extendsRelpath = API.PATH.relative(API.PATH.dirname(gitRoot), path);
+								var depRelpath = ".deps/" + extendsRelpath.split("/").shift();
+								if (!provenances.extends[extendsRelpath]) {
+									provenances.extends[extendsRelpath] = {
+										location: "{{__DIRNAME__}}/.deps/" + extendsRelpath
+									};
 								} else {
-									mappings[current.alias].branch = false;
+									return callback(new Error("Already declared (use unique containing project basenames for external mappings): " + extendsRelpath));
+								}
+								API.EXTEND(true, provenances.extends[extendsRelpath], provenance[path]);
+
+								if (!provenances.declaredMappings["./../" + depRelpath]) {
+									provenances.declaredMappings["./../" + depRelpath] = {
+										path: gitRoot
+									};
+								} else
+								if (provenances.declaredMappings["./../" + depRelpath].path !== gitRoot) {
+									console.log("depRelpath", depRelpath);
+									console.log("provenances.declaredMappings", provenances.declaredMappings);
+									console.log("gitRoot", gitRoot);
+									return callback(new Error("Already declared: " + extendsRelpath));
+								}
+
+								return callback(null);
+							});
+						});
+					}
+					return waitfor();
+				})();
+			}
+
+			return getProvenances().then(function (provenances) {
+
+				var commands =
+					Object.keys(provenances.declaredMappings)
+					.concat(Object.keys(resolvedConfig.declaredMappings))
+					.map(function (alias) {
+
+						var path = (
+							(resolvedConfig.declaredMappings[alias] && resolvedConfig.declaredMappings[alias].path) ||
+							provenances.declaredMappings[alias].path
+						);
+
+						return [
+							'echo "[repository]"',
+							'echo "' + alias + '"',
+							'echo "' + API.FS.realpathSync(path) + '"',
+							'pushd "' + path + '"',
+							'echo "[repository.branch]"',
+							'git branch',
+							'echo "[repository.origin]"',
+							'git remote show -n origin',
+							'echo "[repository.log]"',
+							'git log -n 1',
+							'popd'
+						].join(";");
+					});
+
+				return API.Q.denodeify(function (callback) {
+					return API.runCommands(commands, function (err, stdout) {
+						if (err) return callback(err);
+
+						var expectedMappings = {};
+						for (var name in resolvedConfig.declaredMappings) {
+							expectedMappings[name] = true;
+						}
+						var mappings = {};
+						var current = {
+							alias: null,
+							realpath: null,
+							section: null
+						};
+						var lines = stdout.split("\n");
+						var m = null;
+						for (var i=0,l=lines.length ; i<l ; i++) {
+							// section boundaries
+							m = lines[i].match(/^\[repository(\.([^\]]+))?\]$/);
+							if (m) {
+								current.section = m[2] || "";
+								continue;
+							}
+							// section content
+							if (current.section === "") {
+								current.alias = lines[i];
+								i += 1;
+								current.realpath = lines[i];
+								i += 1;
+								mappings[current.alias] = {
+									realpath: current.realpath,
+									path: lines[i].split(" ")[0],
+									branch: null
+								};
+							} else
+							if (current.section === "branch") {
+								m = lines[i].match(/^\* ((\(detached from )?([^\)]+)(\))?)/);
+								if (m) {
+									if (m[1] === m[3]) {
+										mappings[current.alias].branch = m[1];
+									} else {
+										mappings[current.alias].branch = false;
+									}
+								}
+							} else
+							if (current.section === "origin") {
+								m = lines[i].match(/^\s*Fetch URL:\s*(.+)$/);
+								if (m) {
+									mappings[current.alias].origin = m[1];
+								}
+							} else
+							if (current.section === "log") {
+								m = lines[i].match(/^commit (.+)$/);
+								if (m) {
+									mappings[current.alias].ref = m[1];
+								}
+								m = lines[i].match(/^Date:\s*(.+)$/);
+								if (m) {
+									mappings[current.alias].date = new Date(m[1]).getTime();
 								}
 							}
-						} else
-						if (current.section === "origin") {
-							m = lines[i].match(/^\s*Fetch URL:\s*(.+)$/);
-							if (m) {
-								mappings[current.alias].origin = m[1];
-							}
-						} else
-						if (current.section === "log") {
-							m = lines[i].match(/^commit (.+)$/);
-							if (m) {
-								mappings[current.alias].ref = m[1];
-							}
-							m = lines[i].match(/^Date:\s*(.+)$/);
-							if (m) {
-								mappings[current.alias].date = new Date(m[1]).getTime();
-							}
 						}
-					}
 
-					var finalMappings = {};
-					for (var name in mappings) {
-						finalMappings[name] = {
-							"location": mappings[name].origin + "#" + mappings[name].ref
+						var finalMappings = {};
+						for (var name in mappings) {
+							finalMappings[name] = {
+								"location": mappings[name].origin + "#" + mappings[name].ref
+							};
+							if (mappings[name].branch !== false) {
+								finalMappings[name].location += "(" + mappings[name].branch + ")";
+							}
+							if (aliasedPackages[mappings[name].realpath]) {
+								finalMappings[aliasedPackages[mappings[name].realpath]] = {
+									"location": "{{__DIRNAME__}}/" + name.replace(/^\.\/\.\.\//, ""),
+									"install": false
+								};
+							}
 						}
-						if (mappings[name].branch !== false) {
-							finalMappings[name].location += "(" + mappings[name].branch + ")";
-						}
-					}
-					return API.FS.outputFile(resolvedConfig.export.catalog, JSON.stringify({
-						"config": config,
-						"mappings": finalMappings
-					}, null, 4), "utf8", callback);
-				});
-			})();
+
+						var descriptor = {
+							"@extends": provenances.extends || {},
+							"config": config,
+							"mappings": finalMappings
+						};
+
+						return API.FS.outputFile(
+							resolvedConfig.export.catalog,
+							JSON.stringify(descriptor, null, 4),
+							"utf8",
+							callback
+						);
+					});
+				})();
+			});
 		}
 
-		return getConfig().then(function (config) {
-			if (!config) return;
+		return getDescriptor().then(function (descriptor) {
+			if (!descriptor) return;
 
-			return exportMappings(config);
+			return exportMappings(
+				descriptor.provenance,
+				descriptor.config,
+				descriptor.mappings
+			);
 		});
 
 
