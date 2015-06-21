@@ -364,6 +364,13 @@ resolvedConfig.t = Date.now();
 							"mappings": finalMappings
 						};
 
+						if (API.FS.existsSync(resolvedConfig.export.catalog)) {
+							descriptor = API.DEEPMERGE(
+								JSON.parse(API.FS.readFileSync(resolvedConfig.export.catalog, "utf8")),
+								descriptor
+							);
+						}
+
 						return API.FS.outputFile(
 							resolvedConfig.export.catalog,
 							JSON.stringify(descriptor, null, 4),
