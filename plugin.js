@@ -234,7 +234,8 @@ resolvedConfig.t = Date.now();
 
 								if (!provenances.declaredMappings["./../" + depRelpath]) {
 									provenances.declaredMappings["./../" + depRelpath] = {
-										path: gitRoot
+										path: gitRoot,
+										install: false
 									};
 								} else
 								if (provenances.declaredMappings["./../" + depRelpath].path !== gitRoot) {
@@ -355,6 +356,17 @@ resolvedConfig.t = Date.now();
 									"location": "{{__DIRNAME__}}/" + name.replace(/^\.\/\.\.\//, ""),
 									"install": false
 								};
+							}
+
+							if (
+								(
+									!resolvedConfig.declaredMappings[name] ||
+									resolvedConfig.declaredMappings[name].install !== true
+								) &&
+								provenances.declaredMappings[name] &&
+								provenances.declaredMappings[name].install === false
+							) {
+								finalMappings[name].install = false;
 							}
 						}
 
