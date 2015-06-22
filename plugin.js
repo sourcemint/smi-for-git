@@ -379,19 +379,28 @@ resolvedConfig.t = Date.now();
 						}
 
 						var descriptor = {
+// TODO: Re-write extends to poin to published assets/cats as we don't want to include
+//       the whole system repo we are extending in our target system.
 							"@extends": provenances.extends || {},
 							"config": config,
 							"mappings": finalMappings
 						};
 
+//						function relativizeExtends (descriptor) {
+//							var configStr = JSON.stringify(descriptor);
+//							configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(API.PATH.dirname(API.getRootPath())), "g"), "{{env.PGS_WORKSPACE_ROOT}}");
+//							return JSON.parse(configStr);
+//						}
+
 						function relativize (descriptor) {
 							var configStr = JSON.stringify(descriptor);
-							configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(API.PATH.dirname(API.getRootPath())), "g"), "{{__DIRNAME__}}");
+							configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(API.PATH.dirname(API.getRootPath())), "g"), "{{env.PGS_WORKSPACE_ROOT}}");
 							configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(process.env.PIO_PROFILE_KEY), "g"), "{{env.PIO_PROFILE_KEY}}");
 							configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(process.env.PIO_PROFILE_PATH), "g"), "{{env.PIO_PROFILE_PATH}}");
 							return JSON.parse(configStr);
 						}
 
+//						descriptor["@extends"] = relativizeExtends(descriptor["@extends"]);
 						descriptor = relativize(descriptor);
 
 
