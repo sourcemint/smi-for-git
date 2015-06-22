@@ -218,7 +218,7 @@ resolvedConfig.t = Date.now();
 								var depRelpath = "{{env.PGS_PACKAGES_DIRPATH}}/" + extendsRelpath.split("/").shift();
 								if (!provenances.extends[extendsRelpath]) {
 									provenances.extends[extendsRelpath] = {
-										location: "{{env.PGS_PACKAGES_DIRPATH}}/" + extendsRelpath
+										location: "!{{env.PGS_PACKAGES_DIRPATH}}/" + extendsRelpath
 									};
 								} else {
 									return callback(new Error("Already declared (use unique containing project basenames for external mappings): " + extendsRelpath));
