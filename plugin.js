@@ -394,6 +394,7 @@ resolvedConfig.t = Date.now();
 
 						function relativize (descriptor) {
 							var configStr = JSON.stringify(descriptor);
+							configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(API.PATH.join(API.PATH.dirname(API.getRootPath()), ".deps")), "g"), "{{env.PGS_PACKAGES_DIRPATH}}");
 							configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(API.PATH.dirname(API.getRootPath())), "g"), "{{env.PGS_WORKSPACE_ROOT}}");
 							configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(process.env.PIO_PROFILE_KEY), "g"), "{{env.PIO_PROFILE_KEY}}");
 							configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(process.env.PIO_PROFILE_PATH), "g"), "{{env.PIO_PROFILE_PATH}}");
