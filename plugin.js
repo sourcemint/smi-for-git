@@ -82,22 +82,24 @@ exports.for = function (API) {
 
 								var location = packageDescriptor._data.mappings[alias].location;
 
-								if (/^\./.test(alias)) {
+								if (location) {
+									if (/^\./.test(alias)) {
 /*
-									var location = programDescriptor._data.mappings[alias].location;
-									if (!/^\//.test(location)) {
-										location = API.PATH.join(packageDescriptor._path, "..", location);
-									}
-									location = API.PATH.relative(resolvedConfig.gitRootPath, location);
+										var location = programDescriptor._data.mappings[alias].location;
+										if (!/^\//.test(location)) {
+											location = API.PATH.join(packageDescriptor._path, "..", location);
+										}
+										location = API.PATH.relative(resolvedConfig.gitRootPath, location);
 */
-									resolvedConfig.declaredMappings[alias] = {
-										path: location
-									};
-								} else
-								if (location.substring(0, PGS_PACKAGES_DIRPATH.length) === PGS_PACKAGES_DIRPATH) {
-									resolvedConfig.declaredMappings["./../.deps" + location.substring(PGS_PACKAGES_DIRPATH.length)] = {
-										path: location
-									};
+										resolvedConfig.declaredMappings[alias] = {
+											path: location
+										};
+									} else
+									if (location.substring(0, PGS_PACKAGES_DIRPATH.length) === PGS_PACKAGES_DIRPATH) {
+										resolvedConfig.declaredMappings["{{env.PGS_PACKAGES_DIRPATH}}" + location.substring(PGS_PACKAGES_DIRPATH.length)] = {
+											path: location
+										};
+									}
 								}
 							}
 						}
@@ -167,16 +169,6 @@ resolvedConfig.t = Date.now();
 				return API.loadPINFProgramProtoDescriptor(function (err, programDescriptor) {
 					if (err) return callback(err);
 
-					function relativize () {
-						var configStr = JSON.stringify(programDescriptor._data);
-						configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(API.PATH.dirname(API.getRootPath())), "g"), "{{__DIRNAME__}}");
-						configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(process.env.PIO_PROFILE_KEY), "g"), "{{env.PIO_PROFILE_KEY}}");
-						configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(process.env.PIO_PROFILE_PATH), "g"), "{{env.PIO_PROFILE_PATH}}");
-						programDescriptor._data = JSON.parse(configStr);
-					}
-
-					relativize();
-
 					return callback(null, {
 						"provenance": programDescriptor._data.$provenance || null,
 						"config": programDescriptor._data.config,
@@ -195,7 +187,7 @@ resolvedConfig.t = Date.now();
 					mappings[alias].location &&
 					!/\//.test(alias)
 				) {
-					aliasedPackages[API.FS.realpathSync(mappings[alias].location)] = alias;
+					aliasedPackages[mappings[alias].location] = alias;
 				}
 			}
 
@@ -213,6 +205,7 @@ resolvedConfig.t = Date.now();
 						return callback(null, provenances);
 					});
 					for (var path in provenance) {
+
 						waitfor(path, function (path, callback) {
 
 							return findGitRoot(path, function (err, gitRoot) {
@@ -222,23 +215,23 @@ resolvedConfig.t = Date.now();
 								}
 
 								var extendsRelpath = API.PATH.relative(API.PATH.dirname(gitRoot), path);
-								var depRelpath = ".deps/" + extendsRelpath.split("/").shift();
+								var depRelpath = "{{env.PGS_PACKAGES_DIRPATH}}/" + extendsRelpath.split("/").shift();
 								if (!provenances.extends[extendsRelpath]) {
 									provenances.extends[extendsRelpath] = {
-										location: "{{__DIRNAME__}}/.deps/" + extendsRelpath
+										location: "{{env.PGS_PACKAGES_DIRPATH}}/" + extendsRelpath
 									};
 								} else {
 									return callback(new Error("Already declared (use unique containing project basenames for external mappings): " + extendsRelpath));
 								}
 								API.EXTEND(true, provenances.extends[extendsRelpath], provenance[path]);
 
-								if (!provenances.declaredMappings["./../" + depRelpath]) {
-									provenances.declaredMappings["./../" + depRelpath] = {
+								if (!provenances.declaredMappings[depRelpath]) {
+									provenances.declaredMappings[depRelpath] = {
 										path: gitRoot,
 										install: false
 									};
 								} else
-								if (provenances.declaredMappings["./../" + depRelpath].path !== gitRoot) {
+								if (provenances.declaredMappings[depRelpath].path !== gitRoot) {
 									console.log("depRelpath", depRelpath);
 									console.log("provenances.declaredMappings", provenances.declaredMappings);
 									console.log("gitRoot", gitRoot);
@@ -353,7 +346,7 @@ resolvedConfig.t = Date.now();
 							}
 							if (aliasedPackages[mappings[name].realpath]) {
 								finalMappings[aliasedPackages[mappings[name].realpath]] = {
-									"location": "{{__DIRNAME__}}/" + name.replace(/^\.\/\.\.\//, ""),
+									"location": name.replace(/^\.\/\.\.\//, ""),
 									"install": false
 								};
 							}
@@ -375,6 +368,17 @@ resolvedConfig.t = Date.now();
 							"config": config,
 							"mappings": finalMappings
 						};
+
+						function relativize (descriptor) {
+							var configStr = JSON.stringify(descriptor);
+							configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(API.PATH.dirname(API.getRootPath())), "g"), "{{__DIRNAME__}}");
+							configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(process.env.PIO_PROFILE_KEY), "g"), "{{env.PIO_PROFILE_KEY}}");
+							configStr = configStr.replace(new RegExp(API.ESCAPE_REGEXP_COMPONENT(process.env.PIO_PROFILE_PATH), "g"), "{{env.PIO_PROFILE_PATH}}");
+							return JSON.parse(configStr);
+						}
+
+						descriptor = relativize(descriptor);
+
 
 						if (API.FS.existsSync(resolvedConfig.export.catalog)) {
 							descriptor = API.DEEPMERGE(
