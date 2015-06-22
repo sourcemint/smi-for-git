@@ -99,6 +99,14 @@ exports.for = function (API) {
 										resolvedConfig.declaredMappings["{{env.PGS_PACKAGES_DIRPATH}}" + location.substring(PGS_PACKAGES_DIRPATH.length)] = {
 											path: location
 										};
+									} else {
+										// HACK: This needs to happen deterministically!
+										var subPath = location.replace(/^.+\/\.deps\//, "");
+										if (API.FS.existsSync(API.PATH.join(PGS_PACKAGES_DIRPATH, subPath))) {
+											resolvedConfig.declaredMappings["{{env.PGS_PACKAGES_DIRPATH}}/" + subPath] = {
+												path: API.PATH.join(PGS_PACKAGES_DIRPATH, subPath)
+											};
+										}
 									}
 								}
 							}
@@ -345,10 +353,17 @@ resolvedConfig.t = Date.now();
 								finalMappings[name].location += "(" + mappings[name].branch + ")";
 							}
 							if (aliasedPackages[mappings[name].realpath]) {
+
+								finalMappings[name].alias = aliasedPackages[mappings[name].realpath];
+/*
 								finalMappings[aliasedPackages[mappings[name].realpath]] = {
+									"depends": [
+										name
+									],
 									"location": name.replace(/^\.\/\.\.\//, ""),
 									"install": false
 								};
+*/
 							}
 
 							if (
