@@ -1,5 +1,5 @@
 {
-  "name": "smi-for-git",
-  "version": "0.1.0",
-  "main": "plugin.js"
+    "name": "smi-for-git",
+    "version": "0.1.1",
+    "main": "plugin.js"
 }
