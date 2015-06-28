@@ -35,7 +35,7 @@ exports.for = function (API) {
 
 		return API.Q.denodeify(function (callback) {
 			if (API.env.VERBOSE) {
-				console.log("Running commands:", commands);
+				console.log("Running commands (cwd: " + API.PATH.dirname(targetPath) + "):", commands);
 			}
 		    var proc = API.SPAWN("bash", [
 		        "-s"
