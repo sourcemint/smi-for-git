@@ -9,10 +9,11 @@ exports.for = function (API) {
 				return API.PATH.join(path, ".git");
 			}
 			return API.QFS.read(API.PATH.join(path, ".git")).then(function (pointer) {
-
-console.log("pointer", pointer);
-throw new Error("TODO: Implement");
-
+				var m = pointer.match(/^gitdir: (.+)(\n|$)/);
+				if (!m) {
+					throw new Error("Not a valid pointer '" + pointer + "' to a git repository (loaded from '" + API.PATH.join(path, ".git") + "')!");
+				}
+				return API.PATH.join(path, m[1]);
 			});
 		});
 	}
