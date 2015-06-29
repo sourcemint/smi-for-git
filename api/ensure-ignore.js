@@ -8,12 +8,15 @@ exports.for = function (API) {
 			if (isDirectory) {
 				return API.PATH.join(path, ".git");
 			}
-			return API.QFS.read(API.PATH.join(path, ".git")).then(function (pointer) {
-				var m = pointer.match(/^gitdir: (.+)(\n|$)/);
-				if (!m) {
-					throw new Error("Not a valid pointer '" + pointer + "' to a git repository (loaded from '" + API.PATH.join(path, ".git") + "')!");
-				}
-				return API.PATH.join(path, m[1]);
+			return API.QFS.canonical(path).then(function (path) {
+
+				return API.QFS.read(API.PATH.join(path, ".git")).then(function (pointer) {
+					var m = pointer.match(/^gitdir: (.+)(\n|$)/);
+					if (!m) {
+						throw new Error("Not a valid pointer '" + pointer + "' to a git repository (loaded from '" + API.PATH.join(path, ".git") + "')!");
+					}
+					return API.PATH.join(path, m[1]);
+				});
 			});
 		});
 	}
