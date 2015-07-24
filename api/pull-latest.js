@@ -3,30 +3,11 @@ exports.for = function (API) {
 
 	var exports = {};
 
-	exports.PLFunction = function (sourceUri, targetPath) {
-
-		function parseSourceUri (uri) {
-			// git://git@github.com:sourcemint/sm.expand.git#<ref>(<branch>)
-			var m = uri.match(/^git:\/\/(git@github\.com:[^\/]+\/.+?\.git)(#([^\()]*))?(\(([^\)]+)\))?$/);
-			if (m) {
-				return {
-					origin: m[1],
-					ref: m[3] || null,
-					branch: m[4] || null
-				};
-			} else {
-				throw new Error("Format for uri '" + uri + "' not supported!");
-			}
-		}
-
-		var uriInfo = parseSourceUri(sourceUri);
+	exports.PLFunction = function (targetPath, options) {
 
 		var commands = [
-			"git clone " + uriInfo.origin + ' "' + API.PATH.basename(targetPath) + '"'
+			"git pull origin" + (options.branch ? (" " + options.branch) : "" )
 		];
-		if (uriInfo.ref) {
-			commands.push("git reset --hard " + uriInfo.ref);
-		}
 		commands = commands.concat([
 			'if [ -f ".gitmodules" ]; then',
 			'  git submodule update --init --recursive --rebase',
@@ -35,12 +16,12 @@ exports.for = function (API) {
 
 		return API.Q.denodeify(function (callback) {
 			if (API.env.VERBOSE) {
-				console.log("Running commands (cwd: " + API.PATH.dirname(targetPath) + "):", commands);
+				console.log("Running commands (cwd: " + targetPath + "):", commands);
 			}
 		    var proc = API.SPAWN("bash", [
 		        "-s"
 		    ], {
-		    	cwd: API.PATH.dirname(targetPath),
+		    	cwd: targetPath,
 		    	env: process.env
 		    });
 		    proc.on("error", function(err) {
@@ -50,11 +31,11 @@ exports.for = function (API) {
 		    var stderr = [];
 		    proc.stdout.on('data', function (data) {
 		    	stdout.push(data.toString());
-				if (API.env.VERBOSE) process.stdout.write(data);
+				if (API.env.VERBOSE || options.showProgress) process.stdout.write(data);
 		    });
 		    proc.stderr.on('data', function (data) {
 		    	stderr.push(data.toString());
-				if (API.env.VERBOSE) process.stderr.write(data);
+				if (API.env.VERBOSE || options.showProgress) process.stderr.write(data);
 		    });
 		    proc.stdin.write(commands.join("\n"));
 		    proc.stdin.end();
