@@ -1,4 +1,18 @@
 
+/*
+
+TODO: Remove
+DEPRECATED: This is now done by `sm.contract`.
+
+    "github.com/sourcemint/smi-for-git/0": {
+        "$to": "smi-git-catalog",
+        "export": {
+            "catalog": "{{env.PGS_WORKSPACE_ROOT}}/smi.json"
+        }
+    }
+
+*/
+
 
 exports.for = function (API) {
 
@@ -432,44 +446,6 @@ resolvedConfig.t = Date.now();
 				descriptor.mappings
 			);
 		});
-
-
-/*
-		function ensureMappings () {
-			if (!resolvedConfig.gitRootPath) {
-				return API.Q.resolve();
-			}
-
-			function ensureMapping (submodulePath) {
-				if (resolvedConfig.existingSubmodules[submodulePath]) {
-					API.console.verbose("Submodule '" + submodulePath + "' already declared!");
-					return API.Q.resolve();
-				}
-				return API.Q.denodeify(function (callback) {
-
-	//console.log("PATH", API.PATH.join(resolvedConfig.gitRootPath, submodulePath));
-
-					return API.FS.exists(API.PATH.join(resolvedConfig.gitRootPath, submodulePath), function (exists) {
-						if (exists) {
-							API.console.verbose("Submodule '" + submodulePath + "' already exists at '" + API.PATH.join(resolvedConfig.gitRootPath, submodulePath) + "'!");
-							return callback(null);
-						}
-
-	//console.log("TODO: create submodule", submodulePath);
-
-	//process.exit(1);
-
-
-						return callback(null);
-					});
-				})();
-			}
-
-			return API.Q.all(Object.keys(resolvedConfig.declaredMappings).map(ensureMapping));
-		}
-
-		return ensureMappings();
-*/
 
 	}
 
