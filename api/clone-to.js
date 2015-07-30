@@ -22,7 +22,8 @@ exports.for = function (API) {
 		var uriInfo = parseSourceUri(sourceUri);
 
 		var commands = [
-			"git clone " + uriInfo.origin + ' "' + API.PATH.basename(targetPath) + '"'
+			"git clone " + uriInfo.origin + ' "' + API.PATH.basename(targetPath) + '"',
+			'cd "' + API.PATH.basename(targetPath) + '"'
 		];
 		if (uriInfo.ref) {
 			commands.push("git reset --hard " + uriInfo.ref);
