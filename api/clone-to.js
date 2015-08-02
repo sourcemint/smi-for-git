@@ -21,8 +21,16 @@ exports.for = function (API) {
 
 		var uriInfo = parseSourceUri(sourceUri);
 
+
+		var origin = uriInfo.origin;
+		// Turn into public URL
+		//  git@github.com:firenode/firenode-for-jsonapi.git to
+		//  https://github.com/amark/gun.git
+		origin = origin.replace(/^git@github\.com:/, "https://github.com/");
+		// TODO: Fall back to private URL if it fails.
+
 		var commands = [
-			"git clone " + uriInfo.origin + ' "' + API.PATH.basename(targetPath) + '"',
+			"git clone " + origin + ' "' + API.PATH.basename(targetPath) + '"',
 			'cd "' + API.PATH.basename(targetPath) + '"'
 		];
 		if (uriInfo.ref) {
